@@ -5,7 +5,9 @@
 
 #include <string>
 #include <vector>
-#include <pcre.h>
+
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 
 
 class SPCREResult {
@@ -19,16 +21,14 @@ class SPCREResult {
 
 /* A Search pattern for PCRE */
 class SPCRE {
-  pcre *get_pcre(void);
+  pcre2_code *get_pcre(void);
   public:
   SPCRE(std::string pattern, CliOpt co);
   CliOpt options;
   std::string pat;
-  pcre *prex;
-  pcre_extra *prex_study;
+  pcre2_code *prex;
   SPCREResult match(std::string inpstr, int offset);
   std::string gsub(std::string origstr, std::string repstr);
 };
 
 #endif
-

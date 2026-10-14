@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include <string>
-#include <pcre.h>
 
 using namespace std;
 
@@ -62,13 +61,13 @@ string SPCRE::gsub(string origstr, string repstr)
 
 SPCREResult SPCRE::match(string inpstr, int offset)
 {
-  int rc, ovector[30];
+  int rc;
   SPCREResult res;
   res.didmatch = false;
   res.didfinish = false;
   const char *cs = inpstr.c_str();
-  rc = pcre_exec(prex, prex_study, cs, inpstr.size(), offset, 0,
-                 ovector, sizeof(ovector) / sizeof(ovector[0]));
+  pcre2_match_data *mdata = pcre2_match_data_create_from_pattern(prex, NULL);
+  rc = pcre2_match(prex, (PCRE2_SPTR)cs, inpstr.size(), offset, 0, mdata, NULL);
   if (rc > 0) {
     res.didmatch = true;
   } else {
@@ -76,50 +75,54 @@ SPCREResult SPCRE::match(string inpstr, int offset)
   }
   if (res.didmatch) {
     int i;
+    PCRE2_SIZE *ovector = pcre2_get_ovector_pointer(mdata);
     res.start_offset = ovector[0];
     res.pastend_offset = ovector[1];
     if (res.pastend_offset >= int(inpstr.size()))
       res.didfinish = true;
     for (i = 0; i < rc; i += 1) {
-      int olen = ovector[2*i+1] - ovector[2*i];
-      if (olen < 0) {
-        cerr << "Error on offset " << i << " : " << ovector[2*i] << ","<<ovector[2*i+1] << endl;
+      PCRE2_SIZE ostart = ovector[2*i], opastend = ovector[2*i+1];
+      if (ostart == PCRE2_UNSET || opastend == PCRE2_UNSET) {
+        /* Group did not participate in the match */
+        res.cap.push_back(string());
+        continue;
+      }
+      if (opastend < ostart) {
+        cerr << "Error on offset " << i << " : " << ostart << "," << opastend << endl;
         exit(1);
       }
-      res.cap.push_back(string(cs+ovector[2*i], olen));
+      res.cap.push_back(string(cs + ostart, opastend - ostart));
     }
   }
+  pcre2_match_data_free(mdata);
   return res;
 }
 
 SPCRE::SPCRE(string pattern, CliOpt co)
 {
-  const char *study_error;
   options = co;
   pat = pattern;
   prex = get_pcre();
-  prex_study = pcre_study(prex, 0, &study_error);
-  if (study_error != 0) {
-    cerr << "Error studying pattern " << pat << endl;
-    exit(1);
-  }
 }
 
-pcre *SPCRE::get_pcre(void)
+pcre2_code *SPCRE::get_pcre(void)
 {
-  pcre *result;
-  int optval = PCRE_MULTILINE;
-  const char *errptr;
-  int erroffset;
+  pcre2_code *result;
+  uint32_t optval = PCRE2_MULTILINE;
+  int errcode;
+  PCRE2_SIZE erroffset;
   string curpat = pat;
   if (options.word_boundary)
     curpat = string("\\b") + curpat + string("\\b");
   if (options.case_insensitive)
-    optval |= PCRE_CASELESS;
-  result = pcre_compile(curpat.c_str(), optval, &errptr, &erroffset, NULL);
+    optval |= PCRE2_CASELESS;
+  result = pcre2_compile((PCRE2_SPTR)curpat.c_str(), PCRE2_ZERO_TERMINATED,
+                         optval, &errcode, &erroffset, NULL);
   if (result == 0) {
-    int i;
-    cerr << "Error in pattern, offset " << erroffset << ": " << errptr << endl;
+    PCRE2_SIZE i;
+    PCRE2_UCHAR errbuf[256];
+    pcre2_get_error_message(errcode, errbuf, sizeof(errbuf));
+    cerr << "Error in pattern, offset " << erroffset << ": " << errbuf << endl;
     cerr << curpat << endl;
     for (i = 0; i < erroffset; i += 1)
       cerr << ' ';

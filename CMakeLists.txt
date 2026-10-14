@@ -1,5 +1,5 @@
+cmake_minimum_required(VERSION 3.10)
 project(msrp)
-cmake_minimum_required(VERSION 2.8)
 
 set(PACKAGE_NAME "msrp")
 set(PACKAGE_VERSION "0.9.5")
@@ -18,7 +18,7 @@ add_custom_target(dist
 
 # Dependencies
 include(FindPkgConfig)
-pkg_check_modules(PCRE REQUIRED libpcre)
+pkg_check_modules(PCRE REQUIRED libpcre2-8)
 
 # Sources
 add_subdirectory(src)
